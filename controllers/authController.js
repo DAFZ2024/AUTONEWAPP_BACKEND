@@ -94,11 +94,13 @@ exports.register = async (req, res) => {
     // Encriptar contraseña con formato Django
     const hashedPassword = hashDjangoPassword(password);
 
-    // Insertar usuario
+    // Insertar usuario con todos los campos requeridos según el modelo Django
     const result = await client.query(
       `INSERT INTO lavado_auto_usuario 
-       (nombre_completo, nombre_usuario, correo, password, telefono, direccion, rol, is_active, is_staff, is_superuser, fecha_registro) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW()) 
+       (nombre_completo, nombre_usuario, correo, password, telefono, direccion, rol, 
+        is_active, is_staff, is_superuser, fecha_registro, 
+        failed_login_attempts, first_warning_sent) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), $11, $12) 
        RETURNING id_usuario, nombre_completo, nombre_usuario, correo, rol, fecha_registro`,
       [
         nombre_completo,
@@ -110,7 +112,9 @@ exports.register = async (req, res) => {
         'cliente',
         true,
         false,
-        false
+        false,
+        0,      // failed_login_attempts
+        false   // first_warning_sent
       ]
     );
 
