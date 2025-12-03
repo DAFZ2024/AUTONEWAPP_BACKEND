@@ -5,6 +5,7 @@ require('dotenv').config();
 const authRoutes = require('./routes/authRoutes');
 const reservaRoutes = require('./routes/reservaRoutes');
 const empresaRoutes = require('./routes/empresaRoutes');
+const planRoutes = require('./routes/planRoutes');
 const pool = require('./config/database');
 
 const app = express();
@@ -33,6 +34,7 @@ if (process.env.NODE_ENV === 'development') {
 app.use('/api/auth', authRoutes);
 app.use('/api/reservas', reservaRoutes);
 app.use('/api/empresa', empresaRoutes);
+app.use('/api/planes', planRoutes);
 
 // Ruta de prueba/health check
 app.get('/api/health', (req, res) => {
