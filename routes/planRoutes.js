@@ -63,73 +63,7 @@ router.get('/disponibles', async (req, res) => {
   }
 });
 
-// Obtener detalle de un plan específico
-router.get('/:planId', async (req, res) => {
-  try {
-    const { planId } = req.params;
-    
-    const query = `
-      SELECT 
-        p.id_plan,
-        p.nombre,
-        p.tipo,
-        p.descripcion,
-        p.precio_mensual,
-        p.cantidad_servicios_mes,
-        p.activo,
-        p.incluye_lavado_asientos,
-        p.incluye_aspirado,
-        p.incluye_lavado_exterior,
-        p.incluye_lavado_interior_humedo,
-        p.incluye_encerado,
-        p.incluye_detallado_completo,
-        p.fecha_creacion
-      FROM reservas_plan p
-      WHERE p.id_plan = $1
-    `;
-    
-    const result = await pool.query(query, [planId]);
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Plan no encontrado'
-      });
-    }
-    
-    const plan = result.rows[0];
-    
-    // Obtener servicios incluidos
-    const serviciosQuery = `
-      SELECT 
-        s.id_servicio,
-        s.nombre_servicio,
-        s.descripcion,
-        s.precio,
-        ps.porcentaje_descuento
-      FROM reservas_planservicio ps
-      JOIN reservas_servicio s ON ps.servicio_id = s.id_servicio
-      WHERE ps.plan_id = $1
-    `;
-    const serviciosResult = await pool.query(serviciosQuery, [planId]);
-    
-    res.json({
-      success: true,
-      data: {
-        ...plan,
-        servicios_incluidos: serviciosResult.rows
-      }
-    });
-  } catch (error) {
-    console.error('Error al obtener plan:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error al obtener el plan'
-    });
-  }
-});
-
-// Obtener suscripción activa del usuario
+// Obtener suscripción activa del usuario (DEBE IR ANTES DE /:planId)
 router.get('/mi-suscripcion/activa', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id || req.user.id_usuario;
@@ -218,7 +152,7 @@ router.get('/mi-suscripcion/activa', authenticateToken, async (req, res) => {
   }
 });
 
-// Historial de suscripciones del usuario
+// Historial de suscripciones del usuario (DEBE IR ANTES DE /:planId)
 router.get('/mi-suscripcion/historial', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id || req.user.id_usuario;
@@ -250,6 +184,72 @@ router.get('/mi-suscripcion/historial', authenticateToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error al obtener el historial de suscripciones'
+    });
+  }
+});
+
+// Obtener detalle de un plan específico (RUTAS DINÁMICAS VAN AL FINAL)
+router.get('/:planId', async (req, res) => {
+  try {
+    const { planId } = req.params;
+    
+    const query = `
+      SELECT 
+        p.id_plan,
+        p.nombre,
+        p.tipo,
+        p.descripcion,
+        p.precio_mensual,
+        p.cantidad_servicios_mes,
+        p.activo,
+        p.incluye_lavado_asientos,
+        p.incluye_aspirado,
+        p.incluye_lavado_exterior,
+        p.incluye_lavado_interior_humedo,
+        p.incluye_encerado,
+        p.incluye_detallado_completo,
+        p.fecha_creacion
+      FROM reservas_plan p
+      WHERE p.id_plan = $1
+    `;
+    
+    const result = await pool.query(query, [planId]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Plan no encontrado'
+      });
+    }
+    
+    const plan = result.rows[0];
+    
+    // Obtener servicios incluidos
+    const serviciosQuery = `
+      SELECT 
+        s.id_servicio,
+        s.nombre_servicio,
+        s.descripcion,
+        s.precio,
+        ps.porcentaje_descuento
+      FROM reservas_planservicio ps
+      JOIN reservas_servicio s ON ps.servicio_id = s.id_servicio
+      WHERE ps.plan_id = $1
+    `;
+    const serviciosResult = await pool.query(serviciosQuery, [planId]);
+    
+    res.json({
+      success: true,
+      data: {
+        ...plan,
+        servicios_incluidos: serviciosResult.rows
+      }
+    });
+  } catch (error) {
+    console.error('Error al obtener plan:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener el plan'
     });
   }
 });
