@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/database');
-const { authenticateToken } = require('../middleware/authMiddleware');
+const { protect } = require('../middleware/authMiddleware');
 
 // Obtener todos los planes disponibles (públicos)
 router.get('/disponibles', async (req, res) => {
@@ -64,7 +64,7 @@ router.get('/disponibles', async (req, res) => {
 });
 
 // Obtener suscripción activa del usuario (DEBE IR ANTES DE /:planId)
-router.get('/mi-suscripcion/activa', authenticateToken, async (req, res) => {
+router.get('/mi-suscripcion/activa', protect, async (req, res) => {
   try {
     const userId = req.user.id || req.user.id_usuario;
     
@@ -153,7 +153,7 @@ router.get('/mi-suscripcion/activa', authenticateToken, async (req, res) => {
 });
 
 // Historial de suscripciones del usuario (DEBE IR ANTES DE /:planId)
-router.get('/mi-suscripcion/historial', authenticateToken, async (req, res) => {
+router.get('/mi-suscripcion/historial', protect, async (req, res) => {
   try {
     const userId = req.user.id || req.user.id_usuario;
     
@@ -255,7 +255,7 @@ router.get('/:planId', async (req, res) => {
 });
 
 // Suscribirse a un plan
-router.post('/suscribirse', authenticateToken, async (req, res) => {
+router.post('/suscribirse', protect, async (req, res) => {
   try {
     const userId = req.user.id || req.user.id_usuario;
     const { plan_id, metodo_pago, referencia_pago } = req.body;
@@ -345,7 +345,7 @@ router.post('/suscribirse', authenticateToken, async (req, res) => {
 });
 
 // Cancelar suscripción
-router.put('/cancelar/:suscripcionId', authenticateToken, async (req, res) => {
+router.put('/cancelar/:suscripcionId', protect, async (req, res) => {
   try {
     const userId = req.user.id || req.user.id_usuario;
     const { suscripcionId } = req.params;
