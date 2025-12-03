@@ -1,5 +1,14 @@
 const pool = require('../config/database');
 
+// Función para generar número de reserva único
+const generarNumeroReserva = () => {
+  const prefijo = 'ANW';
+  const letras = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const letraAleatoria = letras.charAt(Math.floor(Math.random() * letras.length));
+  const numeros = Math.floor(10000000 + Math.random() * 90000000); // 8 dígitos
+  return `${prefijo}-${letraAleatoria}${numeros}`;
+};
+
 // Obtener todos los servicios con información de tipo de vehículo
 exports.getServicios = async (req, res) => {
   try {
@@ -311,14 +320,18 @@ exports.crearReserva = async (req, res) => {
       ? (tipo_vehiculo || 'No especificado')
       : 'No especificado';
 
+    // Generar número de reserva único
+    const numeroReserva = generarNumeroReserva();
+
     // Insertar la reserva
     const reservaResult = await client.query(
       `INSERT INTO lavado_auto_reserva 
-       (fecha, hora, estado, empresa_id, usuario_id, es_pago_individual, es_reserva_empresarial,
+       (numero_reserva, fecha, hora, estado, empresa_id, usuario_id, es_pago_individual, es_reserva_empresarial,
         placa_vehiculo, tipo_vehiculo, conductor_asignado, observaciones_empresariales, suscripcion_utilizada_id, pagado_empresa)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-       RETURNING id_reserva`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+       RETURNING id_reserva, numero_reserva`,
       [
+        numeroReserva,
         fecha,
         hora,
         'pendiente',

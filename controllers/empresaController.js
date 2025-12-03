@@ -1,6 +1,15 @@
 const pool = require('../config/database');
 const { deleteImage, getPublicIdFromUrl } = require('../config/cloudinary');
 
+// Función para generar número de reserva único
+const generarNumeroReserva = () => {
+  const prefijo = 'ANW';
+  const letras = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const letraAleatoria = letras.charAt(Math.floor(Math.random() * letras.length));
+  const numeros = Math.floor(10000000 + Math.random() * 90000000); // 8 dígitos
+  return `${prefijo}-${letraAleatoria}${numeros}`;
+};
+
 // URL base de Cloudinary
 const CLOUDINARY_BASE_URL = `https://res.cloudinary.com/${process.env.CLOUDINARY_CLOUD_NAME}/`;
 
@@ -647,13 +656,23 @@ exports.getReservaParaQR = async (req, res) => {
       });
     }
 
-    const reserva = reservaResult.rows[0];
+    let reserva = reservaResult.rows[0];
 
     if (reserva.estado !== 'pendiente') {
       return res.status(400).json({
         success: false,
         message: 'Solo se puede generar QR para reservas pendientes'
       });
+    }
+
+    // Si la reserva no tiene numero_reserva, generar uno y guardarlo
+    if (!reserva.numero_reserva) {
+      const nuevoNumeroReserva = generarNumeroReserva();
+      await client.query(
+        'UPDATE lavado_auto_reserva SET numero_reserva = $1 WHERE id_reserva = $2',
+        [nuevoNumeroReserva, reserva.id_reserva]
+      );
+      reserva.numero_reserva = nuevoNumeroReserva;
     }
 
     // Generar datos para el QR - usamos el numero_reserva como identificador único
