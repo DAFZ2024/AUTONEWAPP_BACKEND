@@ -1275,7 +1275,7 @@ exports.getResumenPagos = async (req, res) => {
        INNER JOIN lavado_auto_reservaservicio rs ON r.id_reserva = rs.reserva_id
        WHERE r.empresa_id = $1 
        AND r.estado = 'completado'
-       AND r.pagado_empresa = false`,
+       AND (r.pagado_empresa = false OR r.pagado_empresa IS NULL)`,
       [empresaId]
     );
 
@@ -1463,7 +1463,7 @@ exports.getReservasPendientesLiquidar = async (req, res) => {
       LEFT JOIN lavado_auto_servicio s ON rs.servicio_id = s.id_servicio
       WHERE r.empresa_id = $1 
       AND r.estado = 'completado'
-      AND r.pagado_empresa = false
+      AND (r.pagado_empresa = false OR r.pagado_empresa IS NULL)
       GROUP BY r.id_reserva, r.numero_reserva, r.fecha, r.hora, r.estado, u.nombre_completo
       ORDER BY r.fecha DESC, r.hora DESC`,
       [empresaId]
