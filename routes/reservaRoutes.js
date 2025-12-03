@@ -13,6 +13,7 @@ router.get('/verificar-suscripcion', protect, reservaController.verificarSuscrip
 router.post('/crear', protect, reservaController.crearReserva);
 router.get('/usuario/:usuarioId', protect, reservaController.getReservasPorUsuario);
 router.put('/cancelar/:reservaId', protect, reservaController.cancelarReserva);
+router.put('/reagendar/:reservaId', protect, reservaController.reagendarReserva);
 
 // Rutas para verificación QR (cliente)
 router.post('/verificar-qr', protect, reservaController.verificarYCompletarReservaQR);

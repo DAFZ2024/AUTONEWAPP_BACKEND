@@ -519,6 +519,99 @@ exports.cancelarReserva = async (req, res) => {
   }
 };
 
+// Reagendar una reserva (cambiar fecha y hora)
+exports.reagendarReserva = async (req, res) => {
+  try {
+    const { reservaId } = req.params;
+    const { nueva_fecha, nueva_hora, usuario_id } = req.body;
+
+    if (!nueva_fecha || !nueva_hora) {
+      return res.status(400).json({
+        success: false,
+        message: 'Se requiere nueva_fecha y nueva_hora'
+      });
+    }
+
+    // Verificar que la reserva existe y pertenece al usuario
+    const checkResult = await pool.query(
+      `SELECT r.id_reserva, r.estado, r.usuario_id, r.empresa_id, r.fecha, r.hora
+       FROM lavado_auto_reserva r
+       WHERE r.id_reserva = $1`,
+      [reservaId]
+    );
+
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reserva no encontrada'
+      });
+    }
+
+    const reserva = checkResult.rows[0];
+
+    if (reserva.usuario_id !== parseInt(usuario_id)) {
+      return res.status(403).json({
+        success: false,
+        message: 'No tienes permiso para modificar esta reserva'
+      });
+    }
+
+    if (reserva.estado === 'cancelada' || reserva.estado === 'completada') {
+      return res.status(400).json({
+        success: false,
+        message: `No se puede reagendar una reserva en estado: ${reserva.estado}`
+      });
+    }
+
+    // Verificar que el nuevo horario esté disponible
+    const horarioOcupado = await pool.query(
+      `SELECT id_reserva FROM lavado_auto_reserva 
+       WHERE empresa_id = $1 AND fecha = $2 AND hora = $3 
+       AND estado != 'cancelada' AND id_reserva != $4`,
+      [reserva.empresa_id, nueva_fecha, nueva_hora, reservaId]
+    );
+
+    if (horarioOcupado.rows.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'El horario seleccionado ya no está disponible'
+      });
+    }
+
+    // Actualizar la reserva con la nueva fecha y hora
+    await pool.query(
+      `UPDATE lavado_auto_reserva 
+       SET fecha = $1, hora = $2 
+       WHERE id_reserva = $3`,
+      [nueva_fecha, nueva_hora, reservaId]
+    );
+
+    // Obtener la reserva actualizada
+    const updatedReserva = await pool.query(
+      `SELECT r.*, e.nombre_empresa 
+       FROM lavado_auto_reserva r
+       INNER JOIN lavado_auto_empresa e ON r.empresa_id = e.id_empresa
+       WHERE r.id_reserva = $1`,
+      [reservaId]
+    );
+
+    res.json({
+      success: true,
+      message: 'Reserva reagendada exitosamente',
+      data: {
+        reserva: updatedReserva.rows[0]
+      }
+    });
+  } catch (error) {
+    console.error('Error al reagendar reserva:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al reagendar la reserva',
+      error: error.message
+    });
+  }
+};
+
 // Obtener horarios disponibles para una fecha y empresa
 exports.getHorariosDisponibles = async (req, res) => {
   try {
