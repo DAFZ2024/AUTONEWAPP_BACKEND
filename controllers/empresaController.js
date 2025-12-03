@@ -832,8 +832,8 @@ exports.solicitarServicio = async (req, res) => {
     // Crear la solicitud
     const insertResult = await client.query(
       `INSERT INTO lavado_auto_solicitudservicioempresa 
-       (empresa_id, servicio_solicitado_id, estado, motivo_solicitud, usuario_responsable, telefono_contacto, fecha_solicitud)
-       VALUES ($1, $2, 'pendiente', $3, $4, $5, NOW())
+       (empresa_id, servicio_solicitado_id, estado, motivo_solicitud, usuario_responsable, telefono_contacto, fecha_solicitud, respuesta_admin)
+       VALUES ($1, $2, 'pendiente', $3, $4, $5, NOW(), '')
        RETURNING id_solicitud, fecha_solicitud`,
       [empresaId, servicioId, motivo, usuarioResponsable, telefonoContacto]
     );
