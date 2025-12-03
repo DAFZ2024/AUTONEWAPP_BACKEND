@@ -22,7 +22,7 @@ router.get('/disponibles', async (req, res) => {
         p.incluye_encerado,
         p.incluye_detallado_completo,
         p.fecha_creacion
-      FROM reservas_plan p
+      FROM lavado_auto_plan p
       WHERE p.activo = true
       ORDER BY p.precio_mensual ASC
     `;
@@ -38,8 +38,8 @@ router.get('/disponibles', async (req, res) => {
           s.descripcion,
           s.precio,
           ps.porcentaje_descuento
-        FROM reservas_planservicio ps
-        JOIN reservas_servicio s ON ps.servicio_id = s.id_servicio
+        FROM lavado_auto_planservicio ps
+        JOIN lavado_auto_servicio s ON ps.servicio_id = s.id_servicio
         WHERE ps.plan_id = $1
       `;
       const serviciosResult = await pool.query(serviciosQuery, [plan.id_plan]);
@@ -89,8 +89,8 @@ router.get('/mi-suscripcion/activa', protect, async (req, res) => {
         p.incluye_lavado_interior_humedo,
         p.incluye_encerado,
         p.incluye_detallado_completo
-      FROM reservas_suscripcionusuario su
-      JOIN reservas_plan p ON su.plan_id = p.id_plan
+      FROM lavado_auto_suscripcionusuario su
+      JOIN lavado_auto_plan p ON su.plan_id = p.id_plan
       WHERE su.usuario_id = $1 
         AND su.estado = 'activa'
         AND su.fecha_fin >= CURRENT_DATE
@@ -118,8 +118,8 @@ router.get('/mi-suscripcion/activa', protect, async (req, res) => {
         s.descripcion,
         s.precio,
         ps.porcentaje_descuento
-      FROM reservas_planservicio ps
-      JOIN reservas_servicio s ON ps.servicio_id = s.id_servicio
+      FROM lavado_auto_planservicio ps
+      JOIN lavado_auto_servicio s ON ps.servicio_id = s.id_servicio
       WHERE ps.plan_id = $1
     `;
     const serviciosResult = await pool.query(serviciosQuery, [suscripcion.id_plan]);
@@ -167,8 +167,8 @@ router.get('/mi-suscripcion/historial', protect, async (req, res) => {
         p.nombre as plan_nombre,
         p.tipo as plan_tipo,
         p.precio_mensual
-      FROM reservas_suscripcionusuario su
-      JOIN reservas_plan p ON su.plan_id = p.id_plan
+      FROM lavado_auto_suscripcionusuario su
+      JOIN lavado_auto_plan p ON su.plan_id = p.id_plan
       WHERE su.usuario_id = $1
       ORDER BY su.fecha_inicio DESC
     `;
@@ -209,7 +209,7 @@ router.get('/:planId', async (req, res) => {
         p.incluye_encerado,
         p.incluye_detallado_completo,
         p.fecha_creacion
-      FROM reservas_plan p
+      FROM lavado_auto_plan p
       WHERE p.id_plan = $1
     `;
     
@@ -232,8 +232,8 @@ router.get('/:planId', async (req, res) => {
         s.descripcion,
         s.precio,
         ps.porcentaje_descuento
-      FROM reservas_planservicio ps
-      JOIN reservas_servicio s ON ps.servicio_id = s.id_servicio
+      FROM lavado_auto_planservicio ps
+      JOIN lavado_auto_servicio s ON ps.servicio_id = s.id_servicio
       WHERE ps.plan_id = $1
     `;
     const serviciosResult = await pool.query(serviciosQuery, [planId]);
@@ -269,7 +269,7 @@ router.post('/suscribirse', protect, async (req, res) => {
     
     // Verificar que el plan existe y está activo
     const planQuery = `
-      SELECT * FROM reservas_plan 
+      SELECT * FROM lavado_auto_plan 
       WHERE id_plan = $1 AND activo = true
     `;
     const planResult = await pool.query(planQuery, [plan_id]);
@@ -285,7 +285,7 @@ router.post('/suscribirse', protect, async (req, res) => {
     
     // Verificar si ya tiene una suscripción activa
     const suscripcionActivaQuery = `
-      SELECT * FROM reservas_suscripcionusuario 
+      SELECT * FROM lavado_auto_suscripcionusuario 
       WHERE usuario_id = $1 
         AND estado = 'activa'
         AND fecha_fin >= CURRENT_DATE
@@ -305,7 +305,7 @@ router.post('/suscribirse', protect, async (req, res) => {
     fechaFin.setDate(fechaFin.getDate() + 30); // 30 días
     
     const insertQuery = `
-      INSERT INTO reservas_suscripcionusuario 
+      INSERT INTO lavado_auto_suscripcionusuario 
         (usuario_id, plan_id, fecha_inicio, fecha_fin, estado, servicios_utilizados_mes, ultimo_reinicio_contador, auto_renovar)
       VALUES ($1, $2, $3, $4, 'activa', 0, $3, true)
       RETURNING *
@@ -317,7 +317,7 @@ router.post('/suscribirse', protect, async (req, res) => {
     // Crear registro de pago si se proporciona
     if (metodo_pago && referencia_pago) {
       const pagoQuery = `
-        INSERT INTO reservas_historialpagossuscripcion 
+        INSERT INTO lavado_auto_historialpagossuscripcion 
           (suscripcion_id, monto, estado, referencia_pago, metodo_pago, fecha_pago)
         VALUES ($1, $2, 'aprobado', $3, $4, NOW())
       `;
@@ -352,7 +352,7 @@ router.put('/cancelar/:suscripcionId', protect, async (req, res) => {
     
     // Verificar que la suscripción pertenece al usuario
     const verificarQuery = `
-      SELECT * FROM reservas_suscripcionusuario 
+      SELECT * FROM lavado_auto_suscripcionusuario 
       WHERE id_suscripcion = $1 AND usuario_id = $2
     `;
     const verificar = await pool.query(verificarQuery, [suscripcionId, userId]);
@@ -366,7 +366,7 @@ router.put('/cancelar/:suscripcionId', protect, async (req, res) => {
     
     // Actualizar estado a cancelada
     const updateQuery = `
-      UPDATE reservas_suscripcionusuario 
+      UPDATE lavado_auto_suscripcionusuario 
       SET estado = 'cancelada', auto_renovar = false
       WHERE id_suscripcion = $1
       RETURNING *
