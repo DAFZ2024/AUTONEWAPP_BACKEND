@@ -1519,3 +1519,198 @@ exports.getReservasPendientesLiquidar = async (req, res) => {
     client.release();
   }
 };
+
+// Obtener reservas ya pagadas a la empresa
+exports.getReservasPagadas = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const empresaId = req.user.id;
+
+    const reservasResult = await client.query(
+      `SELECT 
+        r.id_reserva,
+        r.numero_reserva,
+        r.fecha,
+        r.hora,
+        r.estado,
+        r.fecha_pago_empresa,
+        u.nombre_completo as cliente,
+        COALESCE(SUM(rs.precio_aplicado), 0) as total_servicio,
+        array_agg(json_build_object(
+          'nombre', s.nombre_servicio,
+          'precio', rs.precio_aplicado
+        )) as servicios
+      FROM lavado_auto_reserva r
+      INNER JOIN lavado_auto_usuario u ON r.usuario_id = u.id_usuario
+      LEFT JOIN lavado_auto_reservaservicio rs ON r.id_reserva = rs.reserva_id
+      LEFT JOIN lavado_auto_servicio s ON rs.servicio_id = s.id_servicio
+      WHERE r.empresa_id = $1 
+      AND r.estado = 'completado'
+      AND r.pagado_empresa = true
+      GROUP BY r.id_reserva, r.numero_reserva, r.fecha, r.hora, r.estado, r.fecha_pago_empresa, u.nombre_completo
+      ORDER BY r.fecha_pago_empresa DESC NULLS LAST, r.fecha DESC, r.hora DESC`,
+      [empresaId]
+    );
+
+    res.json({
+      success: true,
+      data: reservasResult.rows
+    });
+
+  } catch (error) {
+    console.error('Error al obtener reservas pagadas:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener reservas pagadas',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  } finally {
+    client.release();
+  }
+};
+
+// Obtener mis reservas de pagos (pendientes y pagadas) - Similar a Django
+exports.getMisReservasPagos = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const empresaId = req.user.id;
+    const { estado, fecha_desde, fecha_hasta, page = 1, limit = 20 } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    // Comisión de la plataforma (12%)
+    const COMISION_PLATAFORMA = 0.12;
+    const PORCENTAJE_EMPRESA = 0.88;
+
+    let whereClause = `WHERE r.empresa_id = $1 AND r.estado = 'completado'`;
+    const params = [empresaId];
+    let paramIndex = 2;
+
+    // Filtro por estado de pago
+    if (estado === 'pagadas') {
+      whereClause += ` AND r.pagado_empresa = true`;
+    } else {
+      whereClause += ` AND (r.pagado_empresa = false OR r.pagado_empresa IS NULL)`;
+    }
+
+    // Filtro por fechas
+    if (fecha_desde) {
+      whereClause += ` AND r.fecha >= $${paramIndex}`;
+      params.push(fecha_desde);
+      paramIndex++;
+    }
+    if (fecha_hasta) {
+      whereClause += ` AND r.fecha <= $${paramIndex}`;
+      params.push(fecha_hasta);
+      paramIndex++;
+    }
+
+    // Obtener reservas con paginación
+    const reservasResult = await client.query(
+      `SELECT 
+        r.id_reserva,
+        r.numero_reserva,
+        r.fecha,
+        r.hora,
+        r.estado,
+        r.pagado_empresa,
+        r.fecha_pago_empresa,
+        u.nombre_completo as cliente,
+        u.telefono as telefono_cliente,
+        COALESCE(SUM(rs.precio_aplicado), 0) as total_original,
+        array_agg(json_build_object(
+          'id', s.id_servicio,
+          'nombre', s.nombre_servicio,
+          'precio', rs.precio_aplicado
+        )) as servicios
+      FROM lavado_auto_reserva r
+      INNER JOIN lavado_auto_usuario u ON r.usuario_id = u.id_usuario
+      LEFT JOIN lavado_auto_reservaservicio rs ON r.id_reserva = rs.reserva_id
+      LEFT JOIN lavado_auto_servicio s ON rs.servicio_id = s.id_servicio
+      ${whereClause}
+      GROUP BY r.id_reserva, r.numero_reserva, r.fecha, r.hora, r.estado, 
+               r.pagado_empresa, r.fecha_pago_empresa, u.nombre_completo, u.telefono
+      ORDER BY r.fecha DESC, r.hora DESC
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+      [...params, parseInt(limit), offset]
+    );
+
+    // Obtener total de registros para paginación
+    const countResult = await client.query(
+      `SELECT COUNT(DISTINCT r.id_reserva) as total
+       FROM lavado_auto_reserva r
+       ${whereClause}`,
+      params
+    );
+
+    // Calcular estadísticas totales
+    const statsResult = await client.query(
+      `SELECT 
+        COUNT(DISTINCT CASE WHEN r.pagado_empresa = false OR r.pagado_empresa IS NULL THEN r.id_reserva END) as total_pendientes,
+        COUNT(DISTINCT CASE WHEN r.pagado_empresa = true THEN r.id_reserva END) as total_pagadas,
+        COALESCE(SUM(CASE WHEN r.pagado_empresa = false OR r.pagado_empresa IS NULL THEN rs.precio_aplicado ELSE 0 END), 0) as valor_pendiente_bruto,
+        COALESCE(SUM(CASE WHEN r.pagado_empresa = true THEN rs.precio_aplicado ELSE 0 END), 0) as valor_pagado_bruto
+       FROM lavado_auto_reserva r
+       LEFT JOIN lavado_auto_reservaservicio rs ON r.id_reserva = rs.reserva_id
+       WHERE r.empresa_id = $1 AND r.estado = 'completado'`,
+      [empresaId]
+    );
+
+    const stats = statsResult.rows[0];
+    const valorPendienteBruto = parseFloat(stats.valor_pendiente_bruto) || 0;
+    const valorPagadoBruto = parseFloat(stats.valor_pagado_bruto) || 0;
+
+    // Calcular el valor que le corresponde a la empresa (88%)
+    const valorPendienteEmpresa = valorPendienteBruto * PORCENTAJE_EMPRESA;
+    const valorPagadoEmpresa = valorPagadoBruto * PORCENTAJE_EMPRESA;
+
+    // Procesar reservas para incluir el cálculo del 88%
+    const reservasProcesadas = reservasResult.rows.map(r => {
+      const totalOriginal = parseFloat(r.total_original) || 0;
+      const comision = totalOriginal * COMISION_PLATAFORMA;
+      const pagoEmpresa = totalOriginal * PORCENTAJE_EMPRESA;
+
+      return {
+        ...r,
+        total_original: totalOriginal,
+        comision_plataforma: comision,
+        pago_empresa: pagoEmpresa,
+        porcentaje_empresa: PORCENTAJE_EMPRESA * 100
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        reservas: reservasProcesadas,
+        stats: {
+          total_reservas_pendientes: parseInt(stats.total_pendientes) || 0,
+          total_reservas_pagadas: parseInt(stats.total_pagadas) || 0,
+          valor_pendiente_bruto: valorPendienteBruto,
+          valor_pendiente_empresa: valorPendienteEmpresa,
+          valor_pagado_bruto: valorPagadoBruto,
+          valor_pagado_empresa: valorPagadoEmpresa,
+          comision_plataforma: COMISION_PLATAFORMA * 100,
+          porcentaje_empresa: PORCENTAJE_EMPRESA * 100
+        },
+        pagination: {
+          total: parseInt(countResult.rows[0].total) || 0,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          totalPages: Math.ceil((parseInt(countResult.rows[0].total) || 0) / parseInt(limit))
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Error al obtener mis reservas de pagos:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener reservas de pagos',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  } finally {
+    client.release();
+  }
+};

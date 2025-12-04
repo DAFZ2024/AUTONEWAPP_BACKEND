@@ -33,5 +33,7 @@ router.get('/pagos/resumen', protectEmpresa, empresaController.getResumenPagos);
 router.get('/pagos/periodos', protectEmpresa, empresaController.getPeriodosLiquidacion);
 router.get('/pagos/periodos/:periodoId', protectEmpresa, empresaController.getDetallePeriodo);
 router.get('/pagos/reservas-pendientes', protectEmpresa, empresaController.getReservasPendientesLiquidar);
+router.get('/pagos/reservas-pagadas', protectEmpresa, empresaController.getReservasPagadas);
+router.get('/pagos/mis-reservas', protectEmpresa, empresaController.getMisReservasPagos);
 
 module.exports = router;
