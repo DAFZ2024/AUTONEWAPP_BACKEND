@@ -362,8 +362,8 @@ exports.crearReserva = async (req, res) => {
     const reservaResult = await client.query(
       `INSERT INTO lavado_auto_reserva 
        (numero_reserva, fecha, hora, estado, empresa_id, usuario_id, es_pago_individual, es_reserva_empresarial,
-        placa_vehiculo, tipo_vehiculo, conductor_asignado, observaciones_empresariales, suscripcion_utilizada_id, pagado_empresa, fue_recuperada)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        placa_vehiculo, tipo_vehiculo, conductor_asignado, observaciones_empresariales, suscripcion_utilizada_id, pagado_empresa, fue_recuperada, recargo_recuperacion)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
        RETURNING id_reserva, numero_reserva`,
       [
         numeroReserva,
@@ -380,7 +380,8 @@ exports.crearReserva = async (req, res) => {
         observaciones_empresariales || '',
         suscripcionUtilizada,
         false, // pagado_empresa: false por defecto
-        false  // fue_recuperada: false por defecto
+        false, // fue_recuperada: false por defecto
+        0      // recargo_recuperacion: 0 por defecto
       ]
     );
 
@@ -880,6 +881,194 @@ exports.getReservaPorNumero = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error al obtener la reserva',
+      error: error.message
+    });
+  }
+};
+
+// Calcular recargo para recuperar reserva vencida
+exports.calcularRecargoRecuperacion = async (req, res) => {
+  try {
+    const { reservaId } = req.params;
+    const { usuario_id } = req.query;
+
+    // Obtener la reserva con su total
+    const result = await pool.query(
+      `SELECT r.id_reserva, r.numero_reserva, r.estado, r.usuario_id, r.empresa_id,
+              r.fecha, r.hora, e.nombre_empresa,
+              COALESCE(SUM(rs.precio_aplicado), 0) as total_original
+       FROM lavado_auto_reserva r
+       INNER JOIN lavado_auto_empresa e ON r.empresa_id = e.id_empresa
+       LEFT JOIN lavado_auto_reservaservicio rs ON r.id_reserva = rs.reserva_id
+       WHERE r.id_reserva = $1
+       GROUP BY r.id_reserva, e.id_empresa`,
+      [reservaId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reserva no encontrada'
+      });
+    }
+
+    const reserva = result.rows[0];
+
+    if (reserva.usuario_id !== parseInt(usuario_id)) {
+      return res.status(403).json({
+        success: false,
+        message: 'No tienes permiso para ver esta reserva'
+      });
+    }
+
+    if (reserva.estado !== 'vencida') {
+      return res.status(400).json({
+        success: false,
+        message: 'Solo se pueden recuperar reservas vencidas'
+      });
+    }
+
+    const totalOriginal = parseFloat(reserva.total_original) || 0;
+    const recargo = totalOriginal * 0.25; // 25% de recargo
+
+    res.json({
+      success: true,
+      data: {
+        reserva: {
+          id_reserva: reserva.id_reserva,
+          numero_reserva: reserva.numero_reserva,
+          empresa_id: reserva.empresa_id,
+          nombre_empresa: reserva.nombre_empresa,
+          fecha_original: reserva.fecha,
+          hora_original: reserva.hora
+        },
+        total_original: totalOriginal,
+        porcentaje_recargo: 25,
+        recargo: recargo,
+        total_a_pagar: recargo // Solo paga el recargo para recuperar
+      }
+    });
+  } catch (error) {
+    console.error('Error al calcular recargo:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al calcular el recargo',
+      error: error.message
+    });
+  }
+};
+
+// Recuperar reserva vencida (reagendar con recargo del 25%)
+exports.recuperarReservaVencida = async (req, res) => {
+  try {
+    const { reservaId } = req.params;
+    const { nueva_fecha, nueva_hora, usuario_id, pago_confirmado } = req.body;
+
+    if (!nueva_fecha || !nueva_hora) {
+      return res.status(400).json({
+        success: false,
+        message: 'Se requiere nueva_fecha y nueva_hora'
+      });
+    }
+
+    if (!pago_confirmado) {
+      return res.status(400).json({
+        success: false,
+        message: 'Debe confirmar el pago del recargo para recuperar la reserva'
+      });
+    }
+
+    // Obtener la reserva con su total
+    const checkResult = await pool.query(
+      `SELECT r.id_reserva, r.numero_reserva, r.estado, r.usuario_id, r.empresa_id,
+              COALESCE(SUM(rs.precio_aplicado), 0) as total_original
+       FROM lavado_auto_reserva r
+       LEFT JOIN lavado_auto_reservaservicio rs ON r.id_reserva = rs.reserva_id
+       WHERE r.id_reserva = $1
+       GROUP BY r.id_reserva`,
+      [reservaId]
+    );
+
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Reserva no encontrada'
+      });
+    }
+
+    const reserva = checkResult.rows[0];
+
+    if (reserva.usuario_id !== parseInt(usuario_id)) {
+      return res.status(403).json({
+        success: false,
+        message: 'No tienes permiso para modificar esta reserva'
+      });
+    }
+
+    if (reserva.estado !== 'vencida') {
+      return res.status(400).json({
+        success: false,
+        message: 'Solo se pueden recuperar reservas con estado vencida'
+      });
+    }
+
+    // Verificar que el nuevo horario esté disponible
+    const horarioOcupado = await pool.query(
+      `SELECT id_reserva FROM lavado_auto_reserva 
+       WHERE empresa_id = $1 AND fecha = $2 AND hora = $3 
+       AND estado NOT IN ('cancelada', 'vencida') AND id_reserva != $4`,
+      [reserva.empresa_id, nueva_fecha, nueva_hora, reservaId]
+    );
+
+    if (horarioOcupado.rows.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'El horario seleccionado ya no está disponible'
+      });
+    }
+
+    // Calcular el recargo (25%)
+    const totalOriginal = parseFloat(reserva.total_original) || 0;
+    const recargo = totalOriginal * 0.25;
+
+    // Actualizar la reserva: cambiar fecha/hora, estado a pendiente, marcar como recuperada
+    await pool.query(
+      `UPDATE lavado_auto_reserva 
+       SET fecha = $1, 
+           hora = $2, 
+           estado = 'pendiente',
+           fue_recuperada = true,
+           recargo_recuperacion = $3
+       WHERE id_reserva = $4`,
+      [nueva_fecha, nueva_hora, recargo, reservaId]
+    );
+
+    // Obtener la reserva actualizada con todos los detalles
+    const updatedReserva = await pool.query(
+      `SELECT r.*, e.nombre_empresa,
+              COALESCE(SUM(rs.precio_aplicado), 0) as total_servicios
+       FROM lavado_auto_reserva r
+       INNER JOIN lavado_auto_empresa e ON r.empresa_id = e.id_empresa
+       LEFT JOIN lavado_auto_reservaservicio rs ON r.id_reserva = rs.reserva_id
+       WHERE r.id_reserva = $1
+       GROUP BY r.id_reserva, e.id_empresa`,
+      [reservaId]
+    );
+
+    res.json({
+      success: true,
+      message: 'Reserva recuperada exitosamente. Se aplicó un recargo del 25%.',
+      data: {
+        reserva: updatedReserva.rows[0],
+        recargo_aplicado: recargo,
+        total_original: totalOriginal
+      }
+    });
+  } catch (error) {
+    console.error('Error al recuperar reserva vencida:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al recuperar la reserva',
       error: error.message
     });
   }

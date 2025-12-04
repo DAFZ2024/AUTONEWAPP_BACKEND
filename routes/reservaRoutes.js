@@ -15,6 +15,10 @@ router.get('/usuario/:usuarioId', protect, reservaController.getReservasPorUsuar
 router.put('/cancelar/:reservaId', protect, reservaController.cancelarReserva);
 router.put('/reagendar/:reservaId', protect, reservaController.reagendarReserva);
 
+// Rutas para recuperación de reservas vencidas
+router.get('/recargo-recuperacion/:reservaId', protect, reservaController.calcularRecargoRecuperacion);
+router.put('/recuperar-vencida/:reservaId', protect, reservaController.recuperarReservaVencida);
+
 // Rutas para verificación QR (cliente)
 router.post('/verificar-qr', protect, reservaController.verificarYCompletarReservaQR);
 router.get('/por-numero/:numeroReserva', protect, reservaController.getReservaPorNumero);
