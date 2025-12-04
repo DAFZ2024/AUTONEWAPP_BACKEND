@@ -1,12 +1,47 @@
 const pool = require('../config/database');
 
-// Función para generar número de reserva único
-const generarNumeroReserva = () => {
-  const prefijo = 'ANW';
-  const letras = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  const letraAleatoria = letras.charAt(Math.floor(Math.random() * letras.length));
-  const numeros = Math.floor(10000000 + Math.random() * 90000000); // 8 dígitos
-  return `${prefijo}-${letraAleatoria}${numeros}`;
+/**
+ * Genera un número único de reserva en formato ANW-B9636010
+ * ANW = prefijo fijo
+ * B = tipo de reserva (B=básica, E=empresarial)
+ * 9636010 = número aleatorio de 7 dígitos
+ * @param {boolean} esReservaEmpresarial - Si es una reserva empresarial
+ * @param {object} client - Cliente de la BD para verificar existencia
+ * @returns {Promise<string>} Número de reserva único
+ */
+const generarNumeroReserva = async (esReservaEmpresarial = false, client = null) => {
+  const dbClient = client || pool;
+  const tipoReserva = esReservaEmpresarial ? 'E' : 'B';
+  
+  let intentos = 0;
+  const maxIntentos = 10;
+  
+  while (intentos < maxIntentos) {
+    // Generar 7 dígitos aleatorios
+    let numeroAleatorio = '';
+    for (let i = 0; i < 7; i++) {
+      numeroAleatorio += Math.floor(Math.random() * 10).toString();
+    }
+    
+    const numeroPropuesto = `ANW-${tipoReserva}${numeroAleatorio}`;
+    
+    // Verificar que no exista en la base de datos
+    const existe = await dbClient.query(
+      'SELECT 1 FROM lavado_auto_reserva WHERE numero_reserva = $1',
+      [numeroPropuesto]
+    );
+    
+    if (existe.rows.length === 0) {
+      return numeroPropuesto;
+    }
+    
+    intentos++;
+  }
+  
+  // Si después de 10 intentos no se encuentra uno único, usar timestamp
+  const tipoReservaFallback = esReservaEmpresarial ? 'E' : 'B';
+  const timestamp = Date.now().toString().slice(-7);
+  return `ANW-${tipoReservaFallback}${timestamp}`;
 };
 
 // Obtener todos los servicios con información de tipo de vehículo
@@ -320,8 +355,8 @@ exports.crearReserva = async (req, res) => {
       ? (tipo_vehiculo || 'No especificado')
       : 'No especificado';
 
-    // Generar número de reserva único
-    const numeroReserva = generarNumeroReserva();
+    // Generar número de reserva único (formato ANW-B1234567 o ANW-E1234567)
+    const numeroReserva = await generarNumeroReserva(es_reserva_empresarial === true, client);
 
     // Insertar la reserva
     const reservaResult = await client.query(
