@@ -1615,7 +1615,6 @@ exports.getMisReservasPagos = async (req, res) => {
         r.hora,
         r.estado,
         r.pagado_empresa,
-        r.fecha_pago_empresa,
         u.nombre_completo as cliente,
         u.telefono as telefono_cliente,
         COALESCE(SUM(rs.precio_aplicado), 0) as total_original,
@@ -1630,7 +1629,7 @@ exports.getMisReservasPagos = async (req, res) => {
       LEFT JOIN lavado_auto_servicio s ON rs.servicio_id = s.id_servicio
       ${whereClause}
       GROUP BY r.id_reserva, r.numero_reserva, r.fecha, r.hora, r.estado, 
-               r.pagado_empresa, r.fecha_pago_empresa, u.nombre_completo, u.telefono
+               r.pagado_empresa, u.nombre_completo, u.telefono
       ORDER BY r.fecha DESC, r.hora DESC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
       [...params, parseInt(limit), offset]
