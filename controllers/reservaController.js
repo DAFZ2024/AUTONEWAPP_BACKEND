@@ -362,8 +362,8 @@ exports.crearReserva = async (req, res) => {
     const reservaResult = await client.query(
       `INSERT INTO lavado_auto_reserva 
        (numero_reserva, fecha, hora, estado, empresa_id, usuario_id, es_pago_individual, es_reserva_empresarial,
-        placa_vehiculo, tipo_vehiculo, conductor_asignado, observaciones_empresariales, suscripcion_utilizada_id, pagado_empresa)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        placa_vehiculo, tipo_vehiculo, conductor_asignado, observaciones_empresariales, suscripcion_utilizada_id, pagado_empresa, fue_recuperada)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
        RETURNING id_reserva, numero_reserva`,
       [
         numeroReserva,
@@ -379,7 +379,8 @@ exports.crearReserva = async (req, res) => {
         conductorFinal,
         observaciones_empresariales || '',
         suscripcionUtilizada,
-        false // pagado_empresa: false por defecto
+        false, // pagado_empresa: false por defecto
+        false  // fue_recuperada: false por defecto
       ]
     );
 
