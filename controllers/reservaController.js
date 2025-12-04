@@ -542,7 +542,7 @@ exports.cancelarReserva = async (req, res) => {
       });
     }
 
-    if (reserva.estado === 'cancelada' || reserva.estado === 'completada') {
+    if (reserva.estado === 'cancelada' || reserva.estado === 'completado') {
       return res.status(400).json({
         success: false,
         message: `No se puede cancelar una reserva en estado: ${reserva.estado}`
@@ -606,7 +606,7 @@ exports.reagendarReserva = async (req, res) => {
       });
     }
 
-    if (reserva.estado === 'cancelada' || reserva.estado === 'completada') {
+    if (reserva.estado === 'cancelada' || reserva.estado === 'completado') {
       return res.status(400).json({
         success: false,
         message: `No se puede reagendar una reserva en estado: ${reserva.estado}`
