@@ -13,32 +13,32 @@ const { deleteImage, getPublicIdFromUrl } = require('../config/cloudinary');
 const generarNumeroReserva = async (esReservaEmpresarial = false, client = null) => {
   const dbClient = client || pool;
   const tipoReserva = esReservaEmpresarial ? 'E' : 'B';
-  
+
   let intentos = 0;
   const maxIntentos = 10;
-  
+
   while (intentos < maxIntentos) {
     // Generar 7 dígitos aleatorios
     let numeroAleatorio = '';
     for (let i = 0; i < 7; i++) {
       numeroAleatorio += Math.floor(Math.random() * 10).toString();
     }
-    
+
     const numeroPropuesto = `ANW-${tipoReserva}${numeroAleatorio}`;
-    
+
     // Verificar que no exista en la base de datos
     const existe = await dbClient.query(
       'SELECT 1 FROM lavado_auto_reserva WHERE numero_reserva = $1',
       [numeroPropuesto]
     );
-    
+
     if (existe.rows.length === 0) {
       return numeroPropuesto;
     }
-    
+
     intentos++;
   }
-  
+
   // Si después de 10 intentos no se encuentra uno único, usar timestamp
   const timestamp = Date.now().toString().slice(-7);
   return `ANW-${tipoReserva}${timestamp}`;
@@ -177,9 +177,23 @@ exports.getDashboardStats = async (req, res) => {
 
   try {
     const empresaId = req.user.id;
-    const today = new Date().toISOString().split('T')[0];
 
-    // 1. Obtener citas de hoy
+    // Usar zona horaria de Colombia para determinar "hoy"
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+
+    console.log(`[Dashboard] Consultando estadísticas para fecha: ${today} (Empresa: ${empresaId})`);
+
+    // 0. IMPORTANTE: Actualizar reservas vencidas antes de contar
+    // (Consistente con reservaController)
+    await client.query(`
+      UPDATE lavado_auto_reserva
+      SET estado = 'vencida'
+      WHERE empresa_id = $1
+      AND estado IN ('pendiente', 'confirmada')
+      AND (fecha < $2::date OR (fecha = $2::date AND hora < (CURRENT_TIME AT TIME ZONE 'America/Bogota') - INTERVAL '1 hour'))
+    `, [empresaId, today]);
+
+    // 1. Obtener citas de hoy (Total del día, excluyendo canceladas)
     const citasHoyResult = await client.query(
       `SELECT COUNT(*) as total
        FROM lavado_auto_reserva 
@@ -226,7 +240,7 @@ exports.getDashboardStats = async (req, res) => {
     const totalReservas = parseInt(satisfaccionResult.rows[0].total) || 0;
     const satisfaccion = totalReservas > 0 ? Math.round((completadas / totalReservas) * 100) : 100;
 
-    // 5. Citas pendientes por confirmar
+    // 5. Citas pendientes por confirmar (De hoy en adelante)
     const citasPendientesResult = await client.query(
       `SELECT COUNT(*) as total
        FROM lavado_auto_reserva 
