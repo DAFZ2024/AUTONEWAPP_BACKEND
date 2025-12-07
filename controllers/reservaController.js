@@ -483,6 +483,7 @@ exports.getReservasPorUsuario = async (req, res) => {
     let query = `
       SELECT r.*, 
              e.nombre_empresa, e.direccion as direccion_empresa, e.telefono as telefono_empresa,
+             ca.puntuacion, ca.comentario,
              json_agg(json_build_object(
                'id_servicio', s.id_servicio,
                'nombre_servicio', s.nombre_servicio,
@@ -493,6 +494,7 @@ exports.getReservasPorUsuario = async (req, res) => {
       INNER JOIN lavado_auto_empresa e ON r.empresa_id = e.id_empresa
       LEFT JOIN lavado_auto_reservaservicio rs ON r.id_reserva = rs.reserva_id
       LEFT JOIN lavado_auto_servicio s ON rs.servicio_id = s.id_servicio
+      LEFT JOIN lavado_auto_calificacionempresa ca ON r.id_reserva = ca.reserva_id
       WHERE r.usuario_id = $1
     `;
 
@@ -504,7 +506,7 @@ exports.getReservasPorUsuario = async (req, res) => {
     }
 
     query += `
-      GROUP BY r.id_reserva, e.id_empresa
+      GROUP BY r.id_reserva, e.id_empresa, ca.puntuacion, ca.comentario
       ORDER BY r.fecha DESC, r.hora DESC
     `;
 
