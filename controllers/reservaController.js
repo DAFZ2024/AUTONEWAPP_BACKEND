@@ -244,9 +244,12 @@ exports.getEmpresasPorServicios = async (req, res) => {
     const result = await pool.query(
       `SELECT DISTINCT e.id_empresa, e.nombre_empresa, e.direccion, e.telefono, 
               e.latitud, e.longitud, e.email,
-              COUNT(DISTINCT es.servicio_id) as servicios_disponibles
+              COUNT(DISTINCT es.servicio_id) as servicios_disponibles,
+              ROUND(COALESCE(AVG(ce.puntuacion), 0), 1) as promedio_calificacion,
+              COUNT(DISTINCT ce.id_calificacion) as total_calificaciones
        FROM lavado_auto_empresa e
        INNER JOIN lavado_auto_empresaservicio es ON e.id_empresa = es.empresa_id
+       LEFT JOIN lavado_auto_calificacionempresa ce ON e.id_empresa = ce.empresa_id
        WHERE e.verificada = true 
        AND es.servicio_id = ANY($1)
        GROUP BY e.id_empresa
