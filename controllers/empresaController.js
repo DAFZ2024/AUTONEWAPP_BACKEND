@@ -353,6 +353,7 @@ exports.getReservasEmpresa = async (req, res) => {
               r.observaciones_empresariales, r.pagado_empresa,
               u.id_usuario, u.nombre_completo as nombre_cliente, u.correo as email_cliente,
               u.telefono as telefono_cliente,
+              ca.puntuacion, ca.comentario as comentario_calificacion,
               json_agg(json_build_object(
                 'id_servicio', s.id_servicio,
                 'nombre_servicio', s.nombre_servicio,
@@ -364,8 +365,9 @@ exports.getReservasEmpresa = async (req, res) => {
        INNER JOIN lavado_auto_usuario u ON r.usuario_id = u.id_usuario
        LEFT JOIN lavado_auto_reservaservicio rs ON r.id_reserva = rs.reserva_id
        LEFT JOIN lavado_auto_servicio s ON rs.servicio_id = s.id_servicio
+       LEFT JOIN lavado_auto_calificacionempresa ca ON r.id_reserva = ca.reserva_id
        ${whereClause}
-       GROUP BY r.id_reserva, u.id_usuario
+       GROUP BY r.id_reserva, u.id_usuario, ca.puntuacion, ca.comentario
        ORDER BY r.fecha DESC, r.hora DESC
        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
       [...params, limite, offset]
