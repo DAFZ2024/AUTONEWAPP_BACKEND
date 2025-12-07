@@ -12,32 +12,32 @@ const pool = require('../config/database');
 const generarNumeroReserva = async (esReservaEmpresarial = false, client = null) => {
   const dbClient = client || pool;
   const tipoReserva = esReservaEmpresarial ? 'E' : 'B';
-  
+
   let intentos = 0;
   const maxIntentos = 10;
-  
+
   while (intentos < maxIntentos) {
     // Generar 7 dígitos aleatorios
     let numeroAleatorio = '';
     for (let i = 0; i < 7; i++) {
       numeroAleatorio += Math.floor(Math.random() * 10).toString();
     }
-    
+
     const numeroPropuesto = `ANW-${tipoReserva}${numeroAleatorio}`;
-    
+
     // Verificar que no exista en la base de datos
     const existe = await dbClient.query(
       'SELECT 1 FROM lavado_auto_reserva WHERE numero_reserva = $1',
       [numeroPropuesto]
     );
-    
+
     if (existe.rows.length === 0) {
       return numeroPropuesto;
     }
-    
+
     intentos++;
   }
-  
+
   // Si después de 10 intentos no se encuentra uno único, usar timestamp
   const tipoReservaFallback = esReservaEmpresarial ? 'E' : 'B';
   const timestamp = Date.now().toString().slice(-7);
@@ -62,10 +62,10 @@ exports.getServicios = async (req, res) => {
     const serviciosConCategoria = result.rows.map(servicio => {
       let categoria = 'general';
       let tiposVehiculo = ['sedan', 'suv', 'camioneta', 'hatchback', 'van', 'camion', 'moto'];
-      
+
       const nombreLower = servicio.nombre_servicio.toLowerCase();
       const descLower = (servicio.descripcion || '').toLowerCase();
-      
+
       // Clasificar por tipo de servicio
       if (nombreLower.includes('básico') || nombreLower.includes('basico') || nombreLower.includes('express')) {
         categoria = 'basico';
@@ -158,9 +158,9 @@ exports.verificarSuscripcion = async (req, res) => {
     const ultimoReinicio = new Date(suscripcion.ultimo_reinicio_contador);
     const ahora = new Date();
     const diasDesdeReinicio = Math.floor((ahora - ultimoReinicio) / (1000 * 60 * 60 * 24));
-    
+
     let serviciosUtilizados = suscripcion.servicios_utilizados_mes;
-    
+
     if (diasDesdeReinicio >= 30) {
       // Reiniciar contador
       await pool.query(
@@ -189,7 +189,7 @@ exports.verificarSuscripcion = async (req, res) => {
 
     // Calcular servicios disponibles
     const cantidadMes = suscripcion.cantidad_servicios_mes;
-    const serviciosDisponibles = cantidadMes === 0 
+    const serviciosDisponibles = cantidadMes === 0
       ? -1 // -1 significa ilimitado
       : Math.max(0, cantidadMes - serviciosUtilizados);
 
@@ -327,7 +327,7 @@ exports.crearReserva = async (req, res) => {
       if (suscResult.rows.length > 0) {
         const susc = suscResult.rows[0];
         const cantidadMes = susc.cantidad_servicios_mes;
-        
+
         // Verificar si tiene servicios disponibles (0 = ilimitado)
         if (cantidadMes > 0 && susc.servicios_utilizados_mes >= cantidadMes) {
           await client.query('ROLLBACK');
@@ -351,7 +351,7 @@ exports.crearReserva = async (req, res) => {
 
     // Determinar tipo de vehículo: solo se usa en reservas empresariales
     // Para reservas individuales, usar valor por defecto
-    const tipoVehiculoFinal = es_reserva_empresarial === true 
+    const tipoVehiculoFinal = es_reserva_empresarial === true
       ? (tipo_vehiculo || 'No especificado')
       : 'No especificado';
 
@@ -400,7 +400,7 @@ exports.crearReserva = async (req, res) => {
       );
 
       const precioOriginal = parseFloat(precioResult.rows[0]?.precio || 0);
-      const precioAplicado = esServicioPlan 
+      const precioAplicado = esServicioPlan
         ? precioOriginal * (1 - descuentoPlan / 100)
         : precioOriginal;
 
@@ -465,6 +465,20 @@ exports.getReservasPorUsuario = async (req, res) => {
 
     console.log('[getReservasPorUsuario] Iniciando consulta para usuario:', usuarioId);
     console.log('[getReservasPorUsuario] Filtro estado:', estado);
+
+    // 1. Actualizar reservas vencidas (más de 1 hora pasada)
+    // Combinar fecha y hora para comparar con el tiempo actual
+    // Intervalo: fecha + hora + 1 hora < NOW()
+    const updateQuery = `
+      UPDATE lavado_auto_reserva
+      SET estado = 'vencida'
+      WHERE usuario_id = $1
+      AND estado IN ('pendiente', 'confirmada')
+      AND (fecha + (hora || '::time')::interval + INTERVAL '1 hour') < NOW()::timestamp
+    `;
+
+    await pool.query(updateQuery, [usuarioId]);
+    console.log('[getReservasPorUsuario] Reservas vencidas actualizadas');
 
     let query = `
       SELECT r.*, 
@@ -704,7 +718,7 @@ exports.getHorariosDisponibles = async (req, res) => {
       const horaNum = parseInt(hora.split(':')[0]);
       const ocupado = horasOcupadas.includes(hora);
       const pasado = esHoy && horaNum <= horaActual;
-      
+
       return {
         hora,
         disponible: !ocupado && !pasado,
@@ -759,7 +773,7 @@ exports.verificarYCompletarReservaQR = async (req, res) => {
       INNER JOIN lavado_auto_empresa e ON r.empresa_id = e.id_empresa
       INNER JOIN lavado_auto_usuario u ON r.usuario_id = u.id_usuario
       WHERE `;
-    
+
     const params = [];
     if (numero_reserva) {
       query += `r.numero_reserva = $1`;
@@ -800,7 +814,7 @@ exports.verificarYCompletarReservaQR = async (req, res) => {
     // Verificar que la fecha de la reserva es hoy (opcional pero recomendado para seguridad)
     const hoy = new Date().toISOString().split('T')[0];
     const fechaReserva = new Date(reserva.fecha).toISOString().split('T')[0];
-    
+
     if (fechaReserva !== hoy) {
       return res.status(400).json({
         success: false,
