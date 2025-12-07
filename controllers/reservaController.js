@@ -474,7 +474,7 @@ exports.getReservasPorUsuario = async (req, res) => {
       SET estado = 'vencida'
       WHERE usuario_id = $1
       AND estado IN ('pendiente', 'confirmada')
-      AND (fecha + (hora || '::time')::interval + INTERVAL '1 hour') < NOW()::timestamp
+      AND (fecha + hora + INTERVAL '1 hour') < NOW()
     `;
 
     await pool.query(updateQuery, [usuarioId]);
