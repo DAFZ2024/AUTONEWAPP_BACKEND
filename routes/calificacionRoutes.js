@@ -4,7 +4,7 @@ const calificacionController = require('../controllers/calificacionController');
 const auth = require('../middleware/authMiddleware'); // Middleware de autenticación
 
 // Todas las rutas requieren autenticación
-router.use(auth);
+router.use(auth.protect);
 
 // Crear nueva calificación
 router.post('/crear', calificacionController.crearCalificacion);
