@@ -246,12 +246,13 @@ exports.getDashboardStats = async (req, res) => {
        FROM lavado_auto_reserva 
        WHERE empresa_id = $1 
        AND estado = 'pendiente'
-       AND fecha >= $2`,
-      [empresaId, today]
+       AND fecha >= (CURRENT_DATE AT TIME ZONE 'America/Bogota')`,
+      [empresaId]
     );
     const citasPendientes = parseInt(citasPendientesResult.rows[0].total) || 0;
 
     // 6. Obtener próximas citas del día
+    // NOTA: Se cambió de 'límite 5' a todas para que el usuario pueda ver cuales son las que están apareciendo
     const proximasCitasResult = await client.query(
       `SELECT r.id_reserva, r.fecha, r.hora, r.estado, r.placa_vehiculo, r.tipo_vehiculo,
               u.nombre_completo as nombre_cliente, u.telefono as telefono_cliente,
@@ -265,12 +266,11 @@ exports.getDashboardStats = async (req, res) => {
        LEFT JOIN lavado_auto_reservaservicio rs ON r.id_reserva = rs.reserva_id
        LEFT JOIN lavado_auto_servicio s ON rs.servicio_id = s.id_servicio
        WHERE r.empresa_id = $1 
-       AND r.fecha = $2
+       AND r.fecha = (CURRENT_DATE AT TIME ZONE 'America/Bogota')
        AND r.estado != 'cancelada'
        GROUP BY r.id_reserva, u.id_usuario
-       ORDER BY r.hora ASC
-       LIMIT 5`,
-      [empresaId, today]
+       ORDER BY r.hora ASC`,
+      [empresaId]
     );
 
     // 7. Ingresos del mes
