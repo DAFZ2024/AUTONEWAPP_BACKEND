@@ -945,6 +945,14 @@ exports.calcularRecargoRecuperacion = async (req, res) => {
     const totalOriginal = parseFloat(reserva.total_original) || 0;
     const recargo = totalOriginal * 0.25; // 25% de recargo
 
+    // Verificar si han pasado más de 48 horas
+    // Construir fecha original combinada
+    const fechaStr = reserva.fecha instanceof Date ? reserva.fecha.toISOString().split('T')[0] : reserva.fecha;
+    const fechaHoraOriginal = new Date(`${fechaStr}T${reserva.hora}`);
+    const ahora = new Date();
+    const diferenciaHoras = (ahora - fechaHoraOriginal) / (1000 * 60 * 60);
+    const esRecuperable = diferenciaHoras <= 48;
+
     res.json({
       success: true,
       data: {
@@ -959,7 +967,9 @@ exports.calcularRecargoRecuperacion = async (req, res) => {
         total_original: totalOriginal,
         porcentaje_recargo: 25,
         recargo: recargo,
-        total_a_pagar: recargo // Solo paga el recargo para recuperar
+        total_a_pagar: recargo, // Solo paga el recargo para recuperar
+        recuperable: esRecuperable,
+        mensaje: esRecuperable ? null : 'El periodo de recuperación de 48 horas ha expirado.'
       }
     });
   } catch (error) {
@@ -1023,6 +1033,19 @@ exports.recuperarReservaVencida = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Solo se pueden recuperar reservas con estado vencida'
+      });
+    }
+
+    // Verificar límite de 48 horas
+    const fechaStr = reserva.fecha instanceof Date ? reserva.fecha.toISOString().split('T')[0] : reserva.fecha;
+    const fechaHoraOriginal = new Date(`${fechaStr}T${reserva.hora}`);
+    const ahora = new Date();
+    const diferenciaHoras = (ahora - fechaHoraOriginal) / (1000 * 60 * 60);
+
+    if (diferenciaHoras > 48) {
+      return res.status(400).json({
+        success: false,
+        message: 'El periodo de recuperación de 48 horas ha expirado. Debes crear una nueva reserva.'
       });
     }
 
