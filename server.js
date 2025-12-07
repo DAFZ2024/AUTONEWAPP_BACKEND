@@ -12,8 +12,8 @@ const app = express();
 
 // Middleware de CORS
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? ['https://tudominio.com'] 
+  origin: process.env.NODE_ENV === 'production'
+    ? ['https://tudominio.com']
     : '*', // En desarrollo permite todos los orígenes
   credentials: true
 }));
@@ -35,6 +35,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/reservas', reservaRoutes);
 app.use('/api/empresa', empresaRoutes);
 app.use('/api/planes', planRoutes);
+app.use('/api/calificaciones', require('./routes/calificacionRoutes'));
+
 
 // Ruta de prueba/health check
 app.get('/api/health', (req, res) => {
